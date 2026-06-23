@@ -23,8 +23,8 @@ npm run dev
 - Loads groups returned by `GET /me/ownedObjects/microsoft.graph.group`
 - Updates the selected group name and description from a popup dialog after confirmation
 - Loads members for the selected group
-- Searches users by first name, last name, display name, mail, or UPN
-- Adds or removes group members through Microsoft Graph
+- Searches users by first name, last name, display name, mail, or UPN, and also searches security groups for nested group membership
+- Adds or removes group members through Microsoft Graph, including security groups inside supported groups
 
 ## Expected Graph permissions
 
@@ -41,6 +41,7 @@ Depending on tenant policy and target group type, Microsoft Graph may still requ
 - `PATCH /groups/{id}`
 - `GET /groups/{id}/members`
 - `GET /users?$filter=startswith(...)`
+- `GET /groups?$filter=securityEnabled eq true and startswith(...)`
 - `POST /groups/{id}/members/$ref`
 - `DELETE /groups/{id}/members/{memberId}/$ref`
 

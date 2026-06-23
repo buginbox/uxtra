@@ -18,21 +18,31 @@ export type DirectoryMember = {
   '@odata.type'?: string
 }
 
-export type UserCandidate = {
+export type DirectoryCandidate = {
   id: string
   displayName?: string | null
   givenName?: string | null
   surname?: string | null
   mail?: string | null
   userPrincipalName?: string | null
+  description?: string | null
+  securityEnabled?: boolean
+  '@odata.type'?: string
+}
+
+export type DirectorySearchResult = {
+  items: DirectoryCandidate[]
+  total: number
 }
 
 type GraphCollection<T> = {
   value: T[]
   '@odata.nextLink'?: string
+  '@odata.count'?: number
 }
 
 const GRAPH_ROOT = 'https://graph.microsoft.com/v1.0'
+const SEARCH_HEADERS = { ConsistencyLevel: 'eventual' }
 
 export function normalizeBearerToken(input: string): string {
   return input.trim().replace(/^Bearer\s+/i, '')
@@ -59,6 +69,15 @@ export function buildUsersFilter(term: string): string {
   }
 
   return filters.join(' or ')
+}
+
+export function buildSecurityGroupsFilter(term: string): string {
+  const escaped = term.trim().replace(/'/g, "''")
+
+  return [
+    `startswith(displayName,'${escaped}')`,
+    `startswith(mail,'${escaped}')`,
+  ].join(' or ')
 }
 
 export function buildDirectoryRef(objectId: string): { '@odata.id': string } {
@@ -96,23 +115,58 @@ export async function fetchGroupMembers(
   })
 }
 
-export async function searchDirectoryUsers(
+export async function searchDirectoryObjects(
   token: string,
   term: string,
+  excludeObjectId?: string,
   limit = 8,
-): Promise<UserCandidate[]> {
-  const params = new URLSearchParams({
+): Promise<DirectorySearchResult> {
+  const userParams = new URLSearchParams({
     '$select': 'id,displayName,givenName,surname,mail,userPrincipalName',
     '$top': String(limit),
+    '$count': 'true',
     '$filter': buildUsersFilter(term),
   })
+  const groupParams = new URLSearchParams({
+    '$select': 'id,displayName,description,mail,securityEnabled',
+    '$top': String(limit),
+    '$count': 'true',
+    '$filter': `(securityEnabled eq true) and (${buildSecurityGroupsFilter(term)})`,
+  })
 
-  const response = await graphJson<GraphCollection<UserCandidate>>(
-    `/users?${params.toString()}`,
-    token,
-  )
+  const [usersResponse, groupsResponse] = await Promise.all([
+    graphJson<GraphCollection<DirectoryCandidate>>(`/users?${userParams.toString()}`, token, {
+      headers: SEARCH_HEADERS,
+    }),
+    graphJson<GraphCollection<DirectoryCandidate>>(`/groups?${groupParams.toString()}`, token, {
+      headers: SEARCH_HEADERS,
+    }),
+  ])
 
-  return response.value
+  const items = [
+    ...usersResponse.value.map((user) => ({ ...user, '@odata.type': '#microsoft.graph.user' })),
+    ...groupsResponse.value.map((group) => ({
+      ...group,
+      '@odata.type': '#microsoft.graph.group',
+    })),
+  ]
+    .filter((candidate) => candidate.id !== excludeObjectId)
+    .filter(
+      (candidate, index, allCandidates) =>
+        allCandidates.findIndex((entry) => entry.id === candidate.id) === index,
+    )
+    .sort((left, right) => {
+      const a = left.displayName?.toLocaleLowerCase() ?? ''
+      const b = right.displayName?.toLocaleLowerCase() ?? ''
+      return a.localeCompare(b)
+    })
+    .slice(0, limit)
+
+  return {
+    items,
+    total: (usersResponse['@odata.count'] ?? usersResponse.value.length) +
+      (groupsResponse['@odata.count'] ?? groupsResponse.value.length),
+  }
 }
 
 export async function renameGroup(
@@ -174,6 +228,7 @@ export async function graphRequest(
       },
     },
   )
+
   if (!response.ok) {
     throw new Error(await extractGraphErrorMessage(response))
   }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   buildDirectoryRef,
+  buildSecurityGroupsFilter,
   buildUsersFilter,
   extractGraphErrorMessage,
   normalizeBearerToken,
@@ -23,6 +24,14 @@ describe('buildUsersFilter', () => {
   it('supports first-name then last-name searches', () => {
     expect(buildUsersFilter('Ada Lovelace')).toBe(
       "startswith(displayName,'Ada Lovelace') or startswith(givenName,'Ada Lovelace') or startswith(surname,'Ada Lovelace') or startswith(mail,'Ada Lovelace') or startswith(userPrincipalName,'Ada Lovelace') or (startswith(givenName,'Ada') and startswith(surname,'Lovelace'))",
+    )
+  })
+})
+
+describe('buildSecurityGroupsFilter', () => {
+  it('targets security groups by name and mail', () => {
+    expect(buildSecurityGroupsFilter('Ops Team')).toBe(
+      "startswith(displayName,'Ops Team') or startswith(mail,'Ops Team')",
     )
   })
 })

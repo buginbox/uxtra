@@ -1,61 +1,73 @@
 .app-shell {
-  width: min(1200px, calc(100% - 32px));
+  width: min(1200px, calc(100% - 28px));
   margin: 0 auto;
-  padding: 32px 0 48px;
+  padding: 24px 0 36px;
   display: grid;
-  gap: 24px;
+  gap: 18px;
 }
 
 .panel {
   background: var(--panel-bg);
   border: 1px solid var(--border);
-  border-radius: 20px;
+  border-radius: 16px;
   box-shadow: var(--shadow);
-  padding: 24px;
+  padding: 18px;
 }
 
 .token-panel {
   display: grid;
-  gap: 20px;
+  gap: 16px;
+}
+
+.token-panel.collapsed {
+  gap: 12px;
 }
 
 .workspace-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px;
+  gap: 18px;
 }
 
 .panel-heading {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 20px;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.token-panel-heading {
+  margin-bottom: 0;
 }
 
 .panel-actions,
 .member-actions,
 .modal-actions,
-.token-actions {
+.token-actions,
+.token-panel-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
 }
 
 .eyebrow {
-  margin: 0 0 6px;
+  margin: 0 0 4px;
   color: var(--accent);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
-.lede {
+.lede,
+.token-helper,
+.token-summary {
   max-width: 72ch;
 }
-.token-helper {
-  max-width: 72ch;
+
+.token-helper,
+.token-summary {
   color: var(--text-muted);
 }
 
@@ -75,11 +87,11 @@
 .picker-panel,
 .modal-form {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .field span {
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text-strong);
 }
@@ -89,16 +101,17 @@ select,
 input {
   width: 100%;
   box-sizing: border-box;
-  border-radius: 14px;
+  border-radius: 11px;
   border: 1px solid var(--border);
   background: var(--input-bg);
   color: var(--text-strong);
-  padding: 14px 16px;
+  padding: 11px 13px;
   font: inherit;
+  font-size: 0.8rem;
 }
 
 textarea {
-  min-height: 112px;
+  min-height: 88px;
   resize: vertical;
 }
 
@@ -114,8 +127,9 @@ button {
   border-radius: 999px;
   background: linear-gradient(135deg, var(--accent), var(--accent-strong));
   color: white;
-  padding: 12px 18px;
+  padding: 10px 14px;
   font: inherit;
+  font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
   transition:
@@ -126,7 +140,7 @@ button {
 
 button:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.22);
 }
 
 button:disabled {
@@ -146,9 +160,9 @@ button:disabled {
 }
 
 .icon-button svg {
-  width: 16px;
-  height: 16px;
-  margin-right: 8px;
+  width: 14px;
+  height: 14px;
+  margin-right: 6px;
 }
 
 .danger-button {
@@ -158,25 +172,33 @@ button:disabled {
 .tips-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 12px;
 }
 
 .tip-card {
-  border-radius: 16px;
+  border-radius: 13px;
   border: 1px solid var(--border);
   background: var(--soft-bg);
-  padding: 18px;
+  padding: 14px;
 }
 
 .tip-card ul {
-  margin: 12px 0 0;
-  padding-left: 18px;
+  margin: 10px 0 0;
+  padding-left: 16px;
+}
+
+.tip-card li,
+.person-row strong,
+.person-row p,
+.group-meta dd,
+.group-meta dt {
+  font-size: 0.8rem;
 }
 
 .notice {
   margin: 0;
-  border-radius: 14px;
-  padding: 14px 16px;
+  border-radius: 11px;
+  padding: 11px 13px;
   border: 1px solid transparent;
 }
 
@@ -203,28 +225,28 @@ button:disabled {
   border-radius: 999px;
   background: var(--soft-bg);
   color: var(--text-strong);
-  padding: 8px 12px;
-  font-size: 13px;
+  padding: 7px 10px;
+  font-size: 10px;
   font-weight: 700;
 }
 
 .group-meta {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
   margin: 0;
 }
 
 .group-meta div {
-  border-radius: 14px;
+  border-radius: 11px;
   background: var(--soft-bg);
-  padding: 16px;
+  padding: 13px;
 }
 
 .group-meta dt {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -240,27 +262,40 @@ button:disabled {
   color: var(--text-muted);
 }
 
+.result-panel {
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.55);
+  padding: 10px;
+}
+
 .result-list,
 .member-list {
   display: grid;
-  gap: 12px;
+  gap: 10px;
+}
+
+.result-list {
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .person-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  border-radius: 16px;
+  gap: 12px;
+  border-radius: 13px;
   border: 1px solid var(--border);
   background: var(--soft-bg);
-  padding: 16px;
+  padding: 13px;
 }
 
 .person-row strong {
   display: block;
   color: var(--text-strong);
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 
 .person-row p {
@@ -273,32 +308,32 @@ button:disabled {
   background: rgba(15, 23, 42, 0.48);
   display: grid;
   place-items: center;
-  padding: 20px;
+  padding: 18px;
   z-index: 1000;
 }
 
 .modal-card {
-  width: min(520px, 100%);
-  border-radius: 20px;
+  width: min(460px, 100%);
+  border-radius: 16px;
   border: 1px solid var(--border);
   background: #fff;
-  box-shadow: 0 28px 60px rgba(15, 23, 42, 0.24);
-  padding: 24px;
+  box-shadow: 0 24px 54px rgba(15, 23, 42, 0.22);
+  padding: 18px;
 }
 
 .modal-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
 .modal-close-button {
-  min-width: 48px;
-  min-height: 48px;
+  min-width: 38px;
+  min-height: 38px;
   padding: 0;
-  font-size: 1.5rem;
+  font-size: 1.2rem;
   line-height: 1;
 }
 
@@ -312,15 +347,15 @@ button:disabled {
 
 @media (max-width: 640px) {
   .app-shell {
-    width: min(100%, calc(100% - 20px));
-    padding: 20px 0 32px;
-    gap: 16px;
+    width: min(100%, calc(100% - 16px));
+    padding: 16px 0 24px;
+    gap: 14px;
   }
 
   .panel,
   .modal-card {
-    padding: 18px;
-    border-radius: 16px;
+    padding: 14px;
+    border-radius: 14px;
   }
 
   .panel-heading,
@@ -334,7 +369,8 @@ button:disabled {
   .token-actions button,
   .member-actions button,
   .panel-actions button,
-  .modal-actions button {
+  .modal-actions button,
+  .token-panel-actions button {
     width: 100%;
   }
 }

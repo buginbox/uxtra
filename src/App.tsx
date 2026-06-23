@@ -7,10 +7,10 @@ import {
   normalizeBearerToken,
   removeGroupMember,
   renameGroup,
-  searchDirectoryUsers,
+  searchDirectoryObjects,
+  type DirectoryCandidate,
   type DirectoryMember,
   type GroupSummary,
-  type UserCandidate,
 } from './lib/graph'
 
 type Notice = {
@@ -27,7 +27,8 @@ function App() {
   const [selectedGroupId, setSelectedGroupId] = useState('')
   const [members, setMembers] = useState<DirectoryMember[]>([])
   const [searchTerm, setSearchTerm] = useState('')
-  const [searchResults, setSearchResults] = useState<UserCandidate[]>([])
+  const [searchResults, setSearchResults] = useState<DirectoryCandidate[]>([])
+  const [searchResultTotal, setSearchResultTotal] = useState(0)
   const [notice, setNotice] = useState<Notice | null>(null)
   const [loadingGroups, setLoadingGroups] = useState(false)
   const [loadingMembers, setLoadingMembers] = useState(false)
@@ -38,6 +39,7 @@ function App() {
   const [renameDraft, setRenameDraft] = useState('')
   const [descriptionDraft, setDescriptionDraft] = useState('')
   const [renamingGroup, setRenamingGroup] = useState(false)
+  const [tokenPanelCollapsed, setTokenPanelCollapsed] = useState(false)
 
   useEffect(() => {
     const savedToken = window.localStorage.getItem(TOKEN_STORAGE_KEY) ?? ''
@@ -52,6 +54,7 @@ function App() {
     if (normalizedToken.length < 2 || normalizedSearch.length < 2 || !selectedGroupId) {
       setSearchingUsers(false)
       setSearchResults([])
+      setSearchResultTotal(0)
       return
     }
 
@@ -60,9 +63,16 @@ function App() {
       setSearchingUsers(true)
 
       try {
-        const results = await searchDirectoryUsers(normalizedToken, normalizedSearch, 8)
+        const result = await searchDirectoryObjects(
+          normalizedToken,
+          normalizedSearch,
+          selectedGroupId,
+          25,
+        )
+
         if (!cancelled) {
-          setSearchResults(results)
+          setSearchResults(result.items)
+          setSearchResultTotal(result.total)
         }
       } catch (error) {
         if (!cancelled) {
@@ -73,6 +83,8 @@ function App() {
                 ? error.message
                 : 'Unexpected error while talking to Microsoft Graph.',
           })
+          setSearchResults([])
+          setSearchResultTotal(0)
         }
       } finally {
         if (!cancelled) {
@@ -95,6 +107,8 @@ function App() {
   const currentGroupDescription = selectedGroup?.description?.trim() ?? ''
   const nextGroupName = renameDraft.trim()
   const nextGroupDescription = descriptionDraft.trim()
+  const selectedGroupIsMicrosoft365 = selectedGroup?.groupTypes?.includes('Unified') ?? false
+  const hasLoadedGroups = groups.length > 0
 
   async function handleTokenSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -123,6 +137,7 @@ function App() {
         setSelectedGroupId('')
         setMembers([])
         setRenameModalOpen(false)
+        setTokenPanelCollapsed(false)
         setNotice({
           kind: 'info',
           text: 'No owned groups returned for this token.',
@@ -135,6 +150,7 @@ function App() {
         : nextGroups[0].id
 
       setSelectedGroupId(nextGroupId)
+      setTokenPanelCollapsed(true)
       setNotice({
         kind: 'success',
         text: `Loaded ${nextGroups.length} group${nextGroups.length === 1 ? '' : 's'}.`,
@@ -145,6 +161,7 @@ function App() {
       setSelectedGroupId('')
       setMembers([])
       setRenameModalOpen(false)
+      setTokenPanelCollapsed(false)
       setNotice({
         kind: 'error',
         text:
@@ -186,12 +203,23 @@ function App() {
     setSelectedGroupId(nextGroupId)
     setSearchTerm('')
     setSearchResults([])
+    setSearchResultTotal(0)
     setRenameModalOpen(false)
     await loadMembers(nextGroupId)
   }
 
-  async function handleAddMember(user: UserCandidate) {
+  async function handleAddMember(user: DirectoryCandidate) {
+    const isSecurityGroup = user['@odata.type'] === '#microsoft.graph.group'
+
     if (!selectedGroupId || !accessToken) {
+      return
+    }
+
+    if (isSecurityGroup && selectedGroupIsMicrosoft365) {
+      setNotice({
+        kind: 'info',
+        text: 'Security groups cannot be added inside a Microsoft 365 group.',
+      })
       return
     }
 
@@ -209,6 +237,7 @@ function App() {
         }),
       )
       setSearchResults((currentResults) => currentResults.filter((candidate) => candidate.id !== user.id))
+      setSearchResultTotal((currentTotal) => Math.max(currentTotal - 1, 0))
       setSearchTerm('')
       setNotice({
         kind: 'success',
@@ -333,82 +362,107 @@ function App() {
   return (
     <>
       <main className="app-shell">
-        <section className="panel token-panel">
-          <div>
-            <p className="eyebrow">Manual token</p>
-            <h1>Entra ID group membership editor</h1>
-            <p className="lede">
-              Paste a delegated Microsoft Graph bearer token, load the groups you own, then add or
-              remove members from one place.
-            </p>
-          <p className="token-helper">
-            Need a token? Open{' '}
-            <a
-              href="https://developer.microsoft.com/en-us/graph/graph-explorer"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Microsoft Graph Explorer
-            </a>{' '}
-            to sign in to the right tenant with the right account, then open the{' '}
-            <strong>Access token</strong> tab and paste that bearer token here.
-          </p>
-          </div>
-
-          <form className="token-form" onSubmit={handleTokenSubmit}>
-            <label className="field" htmlFor="access-token">
-              <span>Bearer access token</span>
-              <textarea
-                id="access-token"
-                value={tokenDraft}
-                onChange={(event) => setTokenDraft(event.target.value)}
-                placeholder="Paste Bearer eyJ0eXAiOiJKV1QiLCJhbGciOi..."
-                spellCheck={false}
-                rows={4}
-              />
-            </label>
-
-            <div className="token-actions">
-              <button type="submit" disabled={!tokenDraft.trim() || loadingGroups}>
-                {loadingGroups ? 'Loading groups…' : 'Load owned groups'}
-              </button>
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() => {
-                  setTokenDraft('')
-                  setAccessToken('')
-                  setGroups([])
-                  setSelectedGroupId('')
-                  setMembers([])
-                  setSearchTerm('')
-                  setSearchResults([])
-                  setNotice(null)
-                  setRenameModalOpen(false)
-                  window.localStorage.removeItem(TOKEN_STORAGE_KEY)
-                }}
-              >
-                Clear token
-              </button>
+        <section className={`panel token-panel ${tokenPanelCollapsed ? 'collapsed' : ''}`}>
+          <div className="panel-heading token-panel-heading">
+            <div>
+              <p className="eyebrow">Manual token</p>
+              <h1>Entra ID group membership editor</h1>
+              <p className="lede">
+                Paste a delegated Microsoft Graph bearer token, load the groups you own, then add
+                or remove members from one place.
+              </p>
+              <p className="token-helper">
+                Need a token? Open{' '}
+                <a
+                  href="https://developer.microsoft.com/en-us/graph/graph-explorer"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Microsoft Graph Explorer
+                </a>{' '}
+                to sign in to the right tenant with the right account, then open the{' '}
+                <strong>Access token</strong> tab and paste that bearer token here.
+              </p>
+              {tokenPanelCollapsed ? (
+                <p className="token-summary">
+                  Token ready. {groups.length} loaded group{groups.length === 1 ? '' : 's'}.
+                </p>
+              ) : null}
             </div>
-          </form>
-
-          <div className="tips-grid">
-            <article className="tip-card">
-              <h2>Delegated permissions</h2>
-              <p>Recommended scopes: Group.ReadWrite.All and User.Read.All.</p>
-            </article>
-            <article className="tip-card">
-              <h2>Graph calls used</h2>
-              <ul>
-                <li>GET /me/ownedObjects/microsoft.graph.group</li>
-                <li>PATCH /groups/{'{id}'}</li>
-                <li>GET /groups/{'{id}'}/members</li>
-                <li>GET /users?$filter=startswith(...)</li>
-                <li>POST and DELETE /groups/{'{id}'}/members/$ref</li>
-              </ul>
-            </article>
+            <div className="token-panel-actions">
+              {hasLoadedGroups ? (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => setTokenPanelCollapsed((collapsed) => !collapsed)}
+                >
+                  {tokenPanelCollapsed ? 'Show token panel' : 'Hide token panel'}
+                </button>
+              ) : null}
+            </div>
           </div>
+
+          {!tokenPanelCollapsed ? (
+            <>
+              <form className="token-form" onSubmit={handleTokenSubmit}>
+                <label className="field" htmlFor="access-token">
+                  <span>Bearer access token</span>
+                  <textarea
+                    id="access-token"
+                    value={tokenDraft}
+                    onChange={(event) => setTokenDraft(event.target.value)}
+                    placeholder="Paste Bearer eyJ0eXAiOiJKV1QiLCJhbGciOi..."
+                    spellCheck={false}
+                    rows={3}
+                  />
+                </label>
+
+                <div className="token-actions">
+                  <button type="submit" disabled={!tokenDraft.trim() || loadingGroups}>
+                    {loadingGroups ? 'Loading groups…' : 'Load owned groups'}
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => {
+                      setTokenDraft('')
+                      setAccessToken('')
+                      setGroups([])
+                      setSelectedGroupId('')
+                      setMembers([])
+                      setSearchTerm('')
+                      setSearchResults([])
+                      setSearchResultTotal(0)
+                      setNotice(null)
+                      setRenameModalOpen(false)
+                      setTokenPanelCollapsed(false)
+                      window.localStorage.removeItem(TOKEN_STORAGE_KEY)
+                    }}
+                  >
+                    Clear token
+                  </button>
+                </div>
+              </form>
+
+              <div className="tips-grid">
+                <article className="tip-card">
+                  <h2>Delegated permissions</h2>
+                  <p>Recommended scopes: Group.ReadWrite.All and User.Read.All.</p>
+                </article>
+                <article className="tip-card">
+                  <h2>Graph calls used</h2>
+                  <ul>
+                    <li>GET /me/ownedObjects/microsoft.graph.group</li>
+                    <li>PATCH /groups/{'{id}'}</li>
+                    <li>GET /groups/{'{id}'}/members</li>
+                    <li>GET /users?$filter=startswith(...)</li>
+                    <li>GET /groups?$filter=securityEnabled eq true and startswith(...)</li>
+                    <li>POST and DELETE /groups/{'{id}'}/members/$ref</li>
+                  </ul>
+                </article>
+              </div>
+            </>
+          ) : null}
 
           {notice ? <p className={`notice ${notice.kind}`}>{notice.text}</p> : null}
         </section>
@@ -483,7 +537,7 @@ function App() {
                 <h2>Add a member</h2>
               </div>
               <span className="count-pill">
-                {searchResults.length} match{searchResults.length === 1 ? '' : 'es'}
+                {searchResults.length} shown / {searchResultTotal} total
               </span>
             </div>
 
@@ -494,53 +548,67 @@ function App() {
                 type="search"
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="Search by first name, last name or email"
+                placeholder="Search by first name, last name, email or security group"
                 disabled={!selectedGroupId || !accessToken}
               />
             </label>
 
             <p className="helper-text">
-              Enter at least two characters. Results come from Microsoft Graph users.
+              Enter at least two characters. Results come from Microsoft Graph users and security
+              groups. Nested security groups are disabled when the selected target is a Microsoft
+              365 group.
             </p>
 
-            <div className="result-list">
-              {!selectedGroupId ? (
-                <p className="empty-state">Select a group to start adding users.</p>
-              ) : null}
-              {selectedGroupId && searchTerm.trim().length < 2 ? (
-                <p className="empty-state">Type a name or email to see suggestions.</p>
-              ) : null}
-              {searchingUsers ? <p className="empty-state">Searching directory…</p> : null}
-              {!searchingUsers &&
-                searchResults.map((user) => {
-                  const alreadyMember = members.some((member) => member.id === user.id)
+            <div className="result-panel">
+              <div className="result-list">
+                {!selectedGroupId ? (
+                  <p className="empty-state">Select a group to start adding users or security groups.</p>
+                ) : null}
+                {selectedGroupId && searchTerm.trim().length < 2 ? (
+                  <p className="empty-state">Type a name, email or group name to see suggestions.</p>
+                ) : null}
+                {searchingUsers ? <p className="empty-state">Searching directory…</p> : null}
+                {!searchingUsers &&
+                  searchResults.map((user) => {
+                    const alreadyMember = members.some((member) => member.id === user.id)
+                    const isSecurityGroup = user['@odata.type'] === '#microsoft.graph.group'
+                    const nestedGroupBlocked = isSecurityGroup && selectedGroupIsMicrosoft365
 
-                  return (
-                    <article key={user.id} className="person-row">
-                      <div>
-                        <strong>{user.displayName ?? user.userPrincipalName ?? user.mail ?? user.id}</strong>
-                        <p>{describePerson(user)}</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => void handleAddMember(user)}
-                        disabled={alreadyMember || pendingAddId === user.id}
-                      >
-                        {alreadyMember
-                          ? 'Already in group'
-                          : pendingAddId === user.id
-                            ? 'Adding…'
-                            : 'Add'}
-                      </button>
-                    </article>
-                  )
-                })}
-              {selectedGroupId &&
-              searchTerm.trim().length >= 2 &&
-              !searchingUsers &&
-              searchResults.length === 0 ? (
-                <p className="empty-state">No matching users returned for this search.</p>
-              ) : null}
+                    return (
+                      <article key={user.id} className="person-row">
+                        <div>
+                          <strong>{user.displayName ?? user.userPrincipalName ?? user.mail ?? user.id}</strong>
+                          <p>{describePerson(user)}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void handleAddMember(user)}
+                          disabled={alreadyMember || nestedGroupBlocked || pendingAddId === user.id}
+                          aria-label={`Add ${isSecurityGroup ? 'security group' : 'member'} ${user.displayName ?? user.id}`}
+                          title={
+                            nestedGroupBlocked
+                              ? 'Security groups cannot be added inside Microsoft 365 groups.'
+                              : undefined
+                          }
+                        >
+                          {alreadyMember
+                            ? 'Already in group'
+                            : nestedGroupBlocked
+                              ? 'Not supported'
+                              : pendingAddId === user.id
+                                ? 'Adding…'
+                                : 'Add'}
+                        </button>
+                      </article>
+                    )
+                  })}
+                {selectedGroupId &&
+                searchTerm.trim().length >= 2 &&
+                !searchingUsers &&
+                searchResultTotal === 0 ? (
+                  <p className="empty-state">No matching users or security groups returned for this search.</p>
+                ) : null}
+              </div>
             </div>
           </section>
         </section>
@@ -695,14 +763,21 @@ function describeGroupType(group: GroupSummary): string {
 }
 
 function describePerson(
-  person: Pick<DirectoryMember, 'givenName' | 'surname' | 'mail' | 'userPrincipalName' | '@odata.type'>,
+  person: Pick<
+    DirectoryMember,
+    'givenName' | 'surname' | 'mail' | 'userPrincipalName' | '@odata.type'
+  > & { description?: string | null },
 ): string {
-  const parts = [person.givenName, person.surname, person.mail ?? person.userPrincipalName]
+  if (person['@odata.type'] === '#microsoft.graph.group') {
+    return ['Security group', person.description ?? person.mail].filter(Boolean).join(' · ')
+  }
+
+  const identity = [person.givenName, person.surname, person.mail ?? person.userPrincipalName]
     .filter(Boolean)
     .join(' · ')
 
-  if (parts) {
-    return parts
+  if (identity) {
+    return identity
   }
 
   return person['@odata.type']?.replace('#microsoft.graph.', '') ?? 'Directory object'
