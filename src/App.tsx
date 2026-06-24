@@ -365,8 +365,9 @@ function App() {
         <section className={`panel token-panel ${tokenPanelCollapsed ? 'collapsed' : ''}`}>
           <div className="panel-heading token-panel-heading">
             <div>
-              <p className="eyebrow">Manual token</p>
-              <h1>Entra ID group membership editor</h1>
+              <p className="eyebrow">Entra ID UX (for group membership management)</p>
+              <h1>UXTRA</h1>
+              <p>&nbsp;</p>
               <p className="lede">
                 Paste a delegated Microsoft Graph bearer token, load the groups you own, then add
                 or remove members from one place.

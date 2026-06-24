@@ -1,4 +1,4 @@
-# Entra Group Manager SPA
+# UXTRA - Entra ID Group Manager
 
 Simple React SPA for managing Microsoft Entra ID group members with a manually pasted Microsoft Graph bearer token.
 
