@@ -3,6 +3,7 @@ import './App.css'
 import {
   addGroupMember,
   fetchGroupMembers,
+  fetchGroupOwners,
   fetchOwnedGroups,
   normalizeBearerToken,
   removeGroupMember,
@@ -26,12 +27,14 @@ function App() {
   const [groups, setGroups] = useState<GroupSummary[]>([])
   const [selectedGroupId, setSelectedGroupId] = useState('')
   const [members, setMembers] = useState<DirectoryMember[]>([])
+  const [owners, setOwners] = useState<DirectoryMember[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [searchResults, setSearchResults] = useState<DirectoryCandidate[]>([])
   const [searchResultTotal, setSearchResultTotal] = useState(0)
   const [notice, setNotice] = useState<Notice | null>(null)
   const [loadingGroups, setLoadingGroups] = useState(false)
   const [loadingMembers, setLoadingMembers] = useState(false)
+  const [loadingOwners, setLoadingOwners] = useState(false)
   const [searchingUsers, setSearchingUsers] = useState(false)
   const [pendingAddId, setPendingAddId] = useState<string | null>(null)
   const [pendingRemoveId, setPendingRemoveId] = useState<string | null>(null)
@@ -122,6 +125,13 @@ function App() {
   const selectedGroupClipboardText = selectedGroupDetails
     .map(([property, value]) => `${property.toLowerCase()}\t${value}`)
     .join('\r\n')
+  const selectedGroupOwnersText = loadingOwners
+    ? 'Loading owners…'
+    : owners.length
+      ? owners
+          .map((owner) => owner.displayName ?? owner.userPrincipalName ?? owner.mail ?? owner.id)
+          .join('\n')
+      : '—'
 
   async function handleTokenSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -149,8 +159,8 @@ function App() {
       if (!nextGroups.length) {
         setSelectedGroupId('')
         setMembers([])
+        setOwners([])
         setRenameModalOpen(false)
-        setTokenPanelCollapsed(false)
         setNotice({
           kind: 'info',
           text: 'No owned groups returned for this token.',
@@ -168,13 +178,13 @@ function App() {
         kind: 'success',
         text: `Loaded ${nextGroups.length} group${nextGroups.length === 1 ? '' : 's'}.`,
       })
-      await loadMembers(nextGroupId, normalized)
+      await Promise.all([loadMembers(nextGroupId, normalized), loadOwners(nextGroupId, normalized)])
     } catch (error) {
       setGroups([])
       setSelectedGroupId('')
       setMembers([])
+      setOwners([])
       setRenameModalOpen(false)
-      setTokenPanelCollapsed(false)
       setNotice({
         kind: 'error',
         text:
@@ -211,14 +221,39 @@ function App() {
       setLoadingMembers(false)
     }
   }
+  async function loadOwners(groupId: string, token = accessToken) {
+    const normalized = normalizeBearerToken(token)
+    if (!groupId || !normalized) {
+      return
+    }
+
+    setLoadingOwners(true)
+
+    try {
+      const nextOwners = await fetchGroupOwners(normalized, groupId)
+      setOwners(nextOwners)
+    } catch (error) {
+      setOwners([])
+      setNotice({
+        kind: 'error',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'Unexpected error while talking to Microsoft Graph.',
+      })
+    } finally {
+      setLoadingOwners(false)
+    }
+  }
 
   async function handleGroupChange(nextGroupId: string) {
     setSelectedGroupId(nextGroupId)
     setSearchTerm('')
     setSearchResults([])
     setSearchResultTotal(0)
+    setOwners([])
     setRenameModalOpen(false)
-    await loadMembers(nextGroupId)
+    await Promise.all([loadMembers(nextGroupId), loadOwners(nextGroupId)])
   }
 
   async function handleAddMember(user: DirectoryCandidate) {
@@ -315,6 +350,17 @@ function App() {
             : 'Unable to copy the selected group details to the clipboard.',
       })
     }
+  }
+  function handleOpenNativeGroupPage() {
+    if (!selectedGroup) {
+      return
+    }
+
+    window.open(
+      `https://myaccount.microsoft.com/groups/${selectedGroup.id}`,
+      '_blank',
+      'noopener,noreferrer',
+    )
   }
 
   function openRenameModal() {
@@ -502,220 +548,251 @@ function App() {
           {notice ? <p className={`notice ${notice.kind}`}>{notice.text}</p> : null}
         </section>
 
-        <section className="workspace-grid">
-          <section className="panel group-panel">
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">Step 1</p>
-                <h2>Select a group</h2>
-              </div>
-              <div className="panel-actions">
-                <span className="count-pill">{groups.length} loaded</span>
-                <button
-                  type="button"
-                  className="ghost-button icon-button"
-                  onClick={openRenameModal}
-                  disabled={!selectedGroup}
-                >
-                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                    <path
-                      d="M4 20h4l10.5-10.5a2.12 2.12 0 1 0-3-3L5 17v3Zm2.5-2.5 9-9 1.5 1.5-9 9H6.5v-1.5Z"
-                      fill="currentColor"
-                    />
-                  </svg>
-                  <span>Edit</span>
-                </button>
-              </div>
-            </div>
-
-            <label className="field" htmlFor="group-picker">
-              <span>Owned groups</span>
-              <select
-                id="group-picker"
-                value={selectedGroupId}
-                onChange={(event) => void handleGroupChange(event.target.value)}
-                disabled={!groups.length || loadingGroups}
-              >
-                {!groups.length ? <option value="">Load groups first</option> : null}
-                {groups.map((group) => (
-                  <option key={group.id} value={group.id}>
-                    {group.displayName ?? '(Unnamed group)'}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            {selectedGroup ? (
-              <table className="group-meta" aria-label="Selected group details">
-                <thead>
-                  <tr>
-                    <th scope="col">Property</th>
-                    <th scope="col">
-                      <span className="group-meta-header">
-                        <span>Value</span>
-                        <button
-                          type="button"
-                          className="ghost-button group-meta-copy"
-                          onClick={() => void handleCopySelectedGroup()}
-                          aria-label="Copy selected group details"
-                          title="Copy selected group details"
-                        >
-                          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                            <path
-                              d="M9 9h9v11H9zM6 4h9v3h2V3H4v14h2z"
-                              fill="currentColor"
-                            />
-                          </svg>
-                        </button>
-                      </span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedGroupDetails.map(([property, value]) => (
-                    <tr key={property}>
-                      <th scope="row">{property}</th>
-                      <td>{value}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <p className="empty-state">Choose a token, then load owned groups.</p>
-            )}
-          </section>
-
-          <section className="panel picker-panel">
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">Step 2</p>
-                <h2>Add a member</h2>
-              </div>
-              <span className="count-pill">
-                {searchResults.length} shown / {searchResultTotal} total
-              </span>
-            </div>
-
-            <label className="field" htmlFor="member-search">
-              <span>People picker</span>
-              <input
-                id="member-search"
-                type="search"
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="Search by first name, last name, email or security group"
-                disabled={!selectedGroupId || !accessToken}
-              />
-            </label>
-
-            <p className="helper-text">
-              Enter at least two characters. Results come from Microsoft Graph users and security
-              groups. Nested security groups are disabled when the selected target is a Microsoft
-              365 group.
-            </p>
-
-            <div className="result-panel">
-              <div className="result-list">
-                {!selectedGroupId ? (
-                  <p className="empty-state">Select a group to start adding users or security groups.</p>
-                ) : null}
-                {selectedGroupId && searchTerm.trim().length < 2 ? (
-                  <p className="empty-state">Type a name, email or group name to see suggestions.</p>
-                ) : null}
-                {searchingUsers ? <p className="empty-state">Searching directory…</p> : null}
-                {!searchingUsers &&
-                  searchResults.map((user) => {
-                    const alreadyMember = members.some((member) => member.id === user.id)
-                    const isSecurityGroup = user['@odata.type'] === '#microsoft.graph.group'
-                    const nestedGroupBlocked = isSecurityGroup && selectedGroupIsMicrosoft365
-
-                    return (
-                      <article key={user.id} className="person-row">
-                        <div>
-                          <strong>{user.displayName ?? user.userPrincipalName ?? user.mail ?? user.id}</strong>
-                          <p>{describePerson(user)}</p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => void handleAddMember(user)}
-                          disabled={alreadyMember || nestedGroupBlocked || pendingAddId === user.id}
-                          aria-label={`Add ${isSecurityGroup ? 'security group' : 'member'} ${user.displayName ?? user.id}`}
-                          title={
-                            nestedGroupBlocked
-                              ? 'Security groups cannot be added inside Microsoft 365 groups.'
-                              : undefined
-                          }
-                        >
-                          {alreadyMember
-                            ? 'Already in group'
-                            : nestedGroupBlocked
-                              ? 'Not supported'
-                              : pendingAddId === user.id
-                                ? 'Adding…'
-                                : 'Add'}
-                        </button>
-                      </article>
-                    )
-                  })}
-                {selectedGroupId &&
-                searchTerm.trim().length >= 2 &&
-                !searchingUsers &&
-                searchResultTotal === 0 ? (
-                  <p className="empty-state">No matching users or security groups returned for this search.</p>
-                ) : null}
-              </div>
-            </div>
-          </section>
-        </section>
-
-        <section className="panel members-panel">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">Step 3</p>
-              <h2>Current members</h2>
-            </div>
-            <div className="member-actions">
-              <span className="count-pill">
-                {members.length} member{members.length === 1 ? '' : 's'}
-              </span>
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() => void loadMembers(selectedGroupId)}
-                disabled={!selectedGroupId || loadingMembers}
-              >
-                {loadingMembers ? 'Refreshing…' : 'Refresh members'}
-              </button>
-            </div>
-          </div>
-
-          {!selectedGroupId ? (
-            <p className="empty-state">No group selected yet.</p>
-          ) : loadingMembers ? (
-            <p className="empty-state">Loading current membership…</p>
-          ) : !members.length ? (
-            <p className="empty-state">This group currently has no members returned by Graph.</p>
-          ) : (
-            <div className="member-list">
-              {members.map((member) => (
-                <article key={member.id} className="person-row">
+        {hasLoadedGroups ? (
+          <>
+            <section className="workspace-grid">
+              <section className="panel group-panel">
+                <div className="panel-heading">
                   <div>
-                    <strong>{member.displayName ?? member.userPrincipalName ?? member.mail ?? member.id}</strong>
-                    <p>{describePerson(member)}</p>
+                    <p className="eyebrow">Step 1</p>
+                    <h2>Select a group</h2>
                   </div>
+                  <div className="panel-actions">
+                    <span className="count-pill">{groups.length} loaded</span>
+                    <button
+                      type="button"
+                      className="ghost-button icon-button"
+                      onClick={handleOpenNativeGroupPage}
+                      disabled={!selectedGroup}
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path
+                          d="M14 5h5v5h-2V8.41l-6.29 6.3-1.42-1.42 6.3-6.29H14V5Zm-8 2h5v2H7v8h8v-4h2v6H5V7Z"
+                          fill="currentColor"
+                        />
+                      </svg>
+                      <span>Manage</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost-button icon-button"
+                      onClick={openRenameModal}
+                      disabled={!selectedGroup}
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path
+                          d="M4 20h4l10.5-10.5a2.12 2.12 0 1 0-3-3L5 17v3Zm2.5-2.5 9-9 1.5 1.5-9 9H6.5v-1.5Z"
+                          fill="currentColor"
+                        />
+                      </svg>
+                      <span>Edit</span>
+                    </button>
+                  </div>
+                </div>
+
+                <label className="field" htmlFor="group-picker">
+                  <span>Owned groups</span>
+                  <select
+                    id="group-picker"
+                    value={selectedGroupId}
+                    onChange={(event) => void handleGroupChange(event.target.value)}
+                    disabled={!groups.length || loadingGroups}
+                  >
+                    {!groups.length ? <option value="">Load groups first</option> : null}
+                    {groups.map((group) => (
+                      <option key={group.id} value={group.id}>
+                        {group.displayName ?? '(Unnamed group)'}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                {selectedGroup ? (
+                  <table className="group-meta" aria-label="Selected group details">
+                    <thead>
+                      <tr>
+                        <th scope="col">Property</th>
+                        <th scope="col">
+                          <span className="group-meta-header">
+                            <span>Value</span>
+                            <button
+                              type="button"
+                              className="ghost-button group-meta-copy"
+                              onClick={() => void handleCopySelectedGroup()}
+                              aria-label="Copy selected group details"
+                              title="Copy selected group details"
+                            >
+                              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                <path
+                                  d="M9 9h9v11H9zM6 4h9v3h2V3H4v14h2z"
+                                  fill="currentColor"
+                                />
+                              </svg>
+                            </button>
+                          </span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedGroupDetails.map(([property, value]) => (
+                        <tr key={property}>
+                          <th scope="row">{property}</th>
+                          <td>{value}</td>
+                        </tr>
+                      ))}
+                      <tr>
+                        <th scope="row">Owners</th>
+                        <td className="group-meta-multiline">{selectedGroupOwnersText}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                ) : (
+                  <p className="empty-state">Choose a token, then load owned groups.</p>
+                )}
+              </section>
+
+              <section className="panel picker-panel">
+                <div className="panel-heading">
+                  <div>
+                    <p className="eyebrow">Step 2</p>
+                    <h2>Add a member</h2>
+                  </div>
+                  <span className="count-pill">
+                    {searchResults.length} shown / {searchResultTotal} total
+                  </span>
+                </div>
+
+                <label className="field" htmlFor="member-search">
+                  <span>People picker</span>
+                  <input
+                    id="member-search"
+                    type="search"
+                    value={searchTerm}
+                    onChange={(event) => setSearchTerm(event.target.value)}
+                    placeholder="Search by first name, last name, email or security group"
+                    disabled={!selectedGroupId || !accessToken}
+                  />
+                </label>
+
+                <p className="helper-text">
+                  Enter at least two characters. Results come from Microsoft Graph users and
+                  security groups. Nested security groups are disabled when the selected target is a
+                  Microsoft 365 group.
+                </p>
+
+                <div className="result-panel">
+                  <div className="result-list">
+                    {!selectedGroupId ? (
+                      <p className="empty-state">Select a group to start adding users or security groups.</p>
+                    ) : null}
+                    {selectedGroupId && searchTerm.trim().length < 2 ? (
+                      <p className="empty-state">Type a name, email or group name to see suggestions.</p>
+                    ) : null}
+                    {searchingUsers ? <p className="empty-state">Searching directory…</p> : null}
+                    {!searchingUsers &&
+                      searchResults.map((user) => {
+                        const alreadyMember = members.some((member) => member.id === user.id)
+                        const isSecurityGroup = user['@odata.type'] === '#microsoft.graph.group'
+                        const nestedGroupBlocked = isSecurityGroup && selectedGroupIsMicrosoft365
+
+                        return (
+                          <article key={user.id} className="person-row">
+                            <div>
+                              <strong>{user.displayName ?? user.userPrincipalName ?? user.mail ?? user.id}</strong>
+                              <p>{describePerson(user)}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => void handleAddMember(user)}
+                              disabled={alreadyMember || nestedGroupBlocked || pendingAddId === user.id}
+                              aria-label={`Add ${isSecurityGroup ? 'security group' : 'member'} ${user.displayName ?? user.id}`}
+                              title={
+                                nestedGroupBlocked
+                                  ? 'Security groups cannot be added inside Microsoft 365 groups.'
+                                  : undefined
+                              }
+                            >
+                              {alreadyMember
+                                ? 'Already in group'
+                                : nestedGroupBlocked
+                                  ? 'Not supported'
+                                  : pendingAddId === user.id
+                                    ? 'Adding…'
+                                    : 'Add'}
+                            </button>
+                          </article>
+                        )
+                      })}
+                    {selectedGroupId &&
+                    searchTerm.trim().length >= 2 &&
+                    !searchingUsers &&
+                    searchResultTotal === 0 ? (
+                      <p className="empty-state">No matching users or security groups returned for this search.</p>
+                    ) : null}
+                  </div>
+                </div>
+              </section>
+            </section>
+
+            <section className="panel members-panel">
+              <div className="panel-heading">
+                <div>
+                  <p className="eyebrow">Step 3</p>
+                  <h2>Current members</h2>
+                </div>
+                <div className="member-actions">
+                  <span className="count-pill">
+                    {members.length} member{members.length === 1 ? '' : 's'}
+                  </span>
                   <button
                     type="button"
-                    className="danger-button"
-                    onClick={() => void handleRemoveMember(member)}
-                    disabled={pendingRemoveId === member.id}
+                    className="ghost-button"
+                    onClick={() => void loadMembers(selectedGroupId)}
+                    disabled={!selectedGroupId || loadingMembers}
                   >
-                    {pendingRemoveId === member.id ? 'Removing…' : 'Remove'}
+                    {loadingMembers ? 'Refreshing…' : 'Refresh members'}
                   </button>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
+                </div>
+              </div>
+
+              {!selectedGroupId ? (
+                <p className="empty-state">No group selected yet.</p>
+              ) : loadingMembers ? (
+                <p className="empty-state">Loading current membership…</p>
+              ) : !members.length ? (
+                <p className="empty-state">This group currently has no members returned by Graph.</p>
+              ) : (
+                <div className="member-list">
+                  {members.map((member) => (
+                    <article key={member.id} className="person-row">
+                      <div>
+                        <strong>{member.displayName ?? member.userPrincipalName ?? member.mail ?? member.id}</strong>
+                        <p>{describePerson(member)}</p>
+                      </div>
+                      <button
+                        type="button"
+                        className="danger-button"
+                        onClick={() => void handleRemoveMember(member)}
+                        disabled={pendingRemoveId === member.id}
+                      >
+                        {pendingRemoveId === member.id ? 'Removing…' : 'Remove'}
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          </>
+        ) : (
+          <section className="panel gated-panel">
+            <p className="eyebrow">Next step</p>
+            <h2>Load owned groups first</h2>
+            <p className="empty-state">
+              The group selector, people picker, and membership management panels stay collapsed
+              until you paste a bearer token and click <strong>Load owned groups</strong>.
+            </p>
+          </section>
+        )}
       </main>
 
       {renameModalOpen && selectedGroup ? (

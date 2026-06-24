@@ -115,6 +115,21 @@ export async function fetchGroupMembers(
     return a.localeCompare(b)
   })
 }
+export async function fetchGroupOwners(
+  token: string,
+  groupId: string,
+): Promise<DirectoryMember[]> {
+  const owners = await fetchAllPages<DirectoryMember>(
+    `/groups/${groupId}/owners?$select=id,displayName,givenName,surname,mail,userPrincipalName`,
+    token,
+  )
+
+  return [...owners].sort((left, right) => {
+    const a = left.displayName?.toLocaleLowerCase() ?? left.userPrincipalName?.toLocaleLowerCase() ?? ''
+    const b = right.displayName?.toLocaleLowerCase() ?? right.userPrincipalName?.toLocaleLowerCase() ?? ''
+    return a.localeCompare(b)
+  })
+}
 
 export async function searchDirectoryObjects(
   token: string,

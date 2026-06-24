@@ -29,6 +29,12 @@
   gap: 18px;
 }
 
+.gated-panel {
+  display: grid;
+  gap: 10px;
+  text-align: center;
+}
+
 .panel-heading {
   display: flex;
   align-items: flex-start;
@@ -287,6 +293,10 @@ button:disabled {
 .group-meta td {
   color: var(--text-strong);
   word-break: break-word;
+}
+
+.group-meta-multiline {
+  white-space: pre-wrap;
 }
 
 .group-meta tbody tr:last-child th,
