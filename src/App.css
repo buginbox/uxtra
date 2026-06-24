@@ -231,29 +231,67 @@ button:disabled {
 }
 
 .group-meta {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin: 0;
-}
-
-.group-meta div {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--border);
   border-radius: 11px;
+  overflow: hidden;
   background: var(--soft-bg);
-  padding: 13px;
 }
 
-.group-meta dt {
-  margin-bottom: 6px;
+.group-meta th,
+.group-meta td {
+  padding: 11px 13px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+  font-size: 0.8rem;
+}
+
+.group-meta thead th {
+  background: rgba(255, 255, 255, 0.55);
   color: var(--text-muted);
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
 }
 
-.group-meta dd {
-  margin: 0;
+.group-meta-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.group-meta-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+.group-meta-copy svg {
+  width: 14px;
+  height: 14px;
+}
+
+.group-meta tbody th {
+  width: 34%;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.group-meta td {
   color: var(--text-strong);
+  word-break: break-word;
+}
+
+.group-meta tbody tr:last-child th,
+.group-meta tbody tr:last-child td {
+  border-bottom: none;
 }
 
 .helper-text,

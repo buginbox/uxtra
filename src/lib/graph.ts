@@ -6,6 +6,7 @@ export type GroupSummary = {
   groupTypes?: string[]
   mailEnabled?: boolean
   securityEnabled?: boolean
+  securityIdentifier?: string | null
 }
 
 export type DirectoryMember = {
@@ -88,7 +89,7 @@ export function buildDirectoryRef(objectId: string): { '@odata.id': string } {
 
 export async function fetchOwnedGroups(token: string): Promise<GroupSummary[]> {
   const groups = await fetchAllPages<GroupSummary>(
-    '/me/ownedObjects/microsoft.graph.group?$select=id,displayName,description,mail,groupTypes,mailEnabled,securityEnabled',
+    '/me/ownedObjects/microsoft.graph.group?$select=id,displayName,description,mail,groupTypes,mailEnabled,securityEnabled,securityIdentifier',
     token,
   )
 

@@ -109,6 +109,19 @@ function App() {
   const nextGroupDescription = descriptionDraft.trim()
   const selectedGroupIsMicrosoft365 = selectedGroup?.groupTypes?.includes('Unified') ?? false
   const hasLoadedGroups = groups.length > 0
+  const selectedGroupDetails = selectedGroup
+    ? [
+        ['Id', selectedGroup.id],
+        ['Name', selectedGroup.displayName || '—'],
+        ['Description', selectedGroup.description || '—'],
+        ['Mail', selectedGroup.mail || '—'],
+        ['Type', describeGroupType(selectedGroup)],
+        ['SSID', selectedGroup.securityIdentifier || '—'],
+      ]
+    : []
+  const selectedGroupClipboardText = selectedGroupDetails
+    .map(([property, value]) => `${property.toLowerCase()}\t${value}`)
+    .join('\r\n')
 
   async function handleTokenSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -280,6 +293,27 @@ function App() {
       })
     } finally {
       setPendingRemoveId(null)
+    }
+  }
+  async function handleCopySelectedGroup() {
+    if (!selectedGroupDetails.length) {
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(selectedGroupClipboardText)
+      setNotice({
+        kind: 'success',
+        text: 'Selected group details copied to the clipboard.',
+      })
+    } catch (error) {
+      setNotice({
+        kind: 'error',
+        text:
+          error instanceof Error
+            ? error.message
+            : 'Unable to copy the selected group details to the clipboard.',
+      })
     }
   }
 
@@ -512,20 +546,40 @@ function App() {
             </label>
 
             {selectedGroup ? (
-              <dl className="group-meta">
-                <div>
-                  <dt>Type</dt>
-                  <dd>{describeGroupType(selectedGroup)}</dd>
-                </div>
-                <div>
-                  <dt>Mail</dt>
-                  <dd>{selectedGroup.mail || '—'}</dd>
-                </div>
-                <div>
-                  <dt>Description</dt>
-                  <dd>{selectedGroup.description || '—'}</dd>
-                </div>
-              </dl>
+              <table className="group-meta" aria-label="Selected group details">
+                <thead>
+                  <tr>
+                    <th scope="col">Property</th>
+                    <th scope="col">
+                      <span className="group-meta-header">
+                        <span>Value</span>
+                        <button
+                          type="button"
+                          className="ghost-button group-meta-copy"
+                          onClick={() => void handleCopySelectedGroup()}
+                          aria-label="Copy selected group details"
+                          title="Copy selected group details"
+                        >
+                          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <path
+                              d="M9 9h9v11H9zM6 4h9v3h2V3H4v14h2z"
+                              fill="currentColor"
+                            />
+                          </svg>
+                        </button>
+                      </span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedGroupDetails.map(([property, value]) => (
+                    <tr key={property}>
+                      <th scope="row">{property}</th>
+                      <td>{value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             ) : (
               <p className="empty-state">Choose a token, then load owned groups.</p>
             )}
